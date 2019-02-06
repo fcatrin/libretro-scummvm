@@ -285,8 +285,8 @@ int MidiDriver_EAS::open() {
 			_config->rate, _config->bufSize, _baseTempo, _rounds);
 
 	// TODO doesn't seem to work with midi streams?
-	if (ConfMan.hasKey("soundfont")) {
-		const Common::String dls = ConfMan.get("soundfont");
+	if (ConfMan.hasKey("soundfont_eas")) {
+		const Common::String dls = ConfMan.get("soundfont_eas");
 
 		debug("loading DLS file '%s'", dls.c_str());
 
