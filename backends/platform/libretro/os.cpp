@@ -300,6 +300,8 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
       bool _mouseVisible;
       int _mouseX;
       int _mouseY;
+      int _mouseTouchX;
+      int _mouseTouchY;
       float _mouseXAcc;
       float _mouseYAcc;
       int _mouseHotspotX;
@@ -854,9 +856,41 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
          x = aCallback(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
          y = aCallback(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
 
-         if (!(x || y)) {
+         if (!(x||y)) {
         	 pointer_x = aCallback(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
         	 pointer_y = aCallback(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+         }
+
+         if (x || y) {
+        	 _mouseTouchX = x;
+        	 _mouseTouchY = y;
+         } else if (pointer_x || pointer_y) {
+        	 _mouseTouchX = pointer_x;
+        	 _mouseTouchY = pointer_y;
+         }
+
+         // check special button
+         int touchKeyCode = -1;
+         down = aCallback(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_MIDDLE);
+         if (down) {
+            // now check for different zones
+            int threshold = (0x7fff - 0x1fff); // TODO use constants for this
+
+            if (_mouseTouchX< -threshold) {
+               if (_mouseTouchY<0) {
+                  touchKeyCode = RETRO_DEVICE_ID_JOYPAD_SELECT;
+               } else {
+                  touchKeyCode = RETRO_DEVICE_ID_JOYPAD_B;
+               }
+            }
+            if (_mouseTouchX > threshold) {
+               if (_mouseTouchY<0) {
+                  touchKeyCode = RETRO_DEVICE_ID_JOYPAD_START;
+               } else {
+                  touchKeyCode = RETRO_DEVICE_ID_JOYPAD_A;
+               }
+            }
+            log_cb(RETRO_LOG_INFO, "threshold: %s point at %i,%i keycode:%i", down ? "down":"up", _mouseTouchX, _mouseTouchY, touchKeyCode);
          }
 
          joy_x = aCallback(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
@@ -983,11 +1017,13 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
                do_joystick = true;
             }
 
-            if (aCallback(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START))
+            if (aCallback(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START)
+            	|| touchKeyCode == RETRO_DEVICE_ID_JOYPAD_START)
             {
                Common::Event ev;
                ev.type = Common::EVENT_MAINMENU;
                _events.push_back(ev);
+               log_cb(RETRO_LOG_INFO, "push EVENT_MAIN_MENU");
             }
          }
 
@@ -1071,9 +1107,18 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
 			// Gamepad keyboard buttons
 			for(int i = 0; i < 8; i ++)
 			{
+				int key = gampad_key_map[i][0];
 				down = aCallback(0, RETRO_DEVICE_JOYPAD, 0, gampad_key_map[i][0]);
+				down |=
+					(key == RETRO_DEVICE_ID_JOYPAD_SELECT && touchKeyCode == RETRO_DEVICE_ID_JOYPAD_SELECT) ||
+					(key == RETRO_DEVICE_ID_JOYPAD_A      && touchKeyCode == RETRO_DEVICE_ID_JOYPAD_A) ||
+					(key == RETRO_DEVICE_ID_JOYPAD_B      && touchKeyCode == RETRO_DEVICE_ID_JOYPAD_B);
+
 				if (down != _joypadkeyboardButtons[i])
 				{
+
+					log_cb(RETRO_LOG_INFO, "keyb %d %s", key, down ? "down":"up");
+
 					_joypadkeyboardButtons[i] = down;
 					bool state = down ? true : false;
 					processKeyEvent(state, gampad_key_map[i][1], (uint32_t)gampad_key_map[i][2], 0);
@@ -1157,8 +1202,8 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
 
          // Absolute pointer position
          if (pointer_x || pointer_y) {
-        	 _mouseX = ((x + 0x7fff) * _screen.w) / 0x10000;
-        	 _mouseY = ((y + 0x7fff) * _screen.h) / 0x10000;
+        	 _mouseX = ((pointer_x + 0x7fff) * _screen.w) / 0x10000;
+        	 _mouseY = ((pointer_y + 0x7fff) * _screen.h) / 0x10000;
 
         	 _mouseX = (_mouseX < 0) ? 0 : _mouseX;
         	 _mouseX = (_mouseX >= _screen.w) ? _screen.w : _mouseX;
