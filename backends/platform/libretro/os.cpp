@@ -803,7 +803,7 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
 
       void processMouse(retro_input_state_t aCallback, int device, float gampad_cursor_speed, bool analog_response_is_cubic, int analog_deadzone, float mouse_speed)
       {
-         int16_t joy_x, joy_y, joy_rx, joy_ry, x, y;
+         int16_t joy_x, joy_y, joy_rx, joy_ry, x, y, pointer_x, pointer_y;
          float analog_amplitude_x, analog_amplitude_y;
          int mouse_acc_int;
          bool do_joystick, do_mouse, down;
@@ -853,6 +853,12 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
          do_joystick = false;
          x = aCallback(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
          y = aCallback(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+
+         if (!(x || y)) {
+        	 pointer_x = aCallback(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
+        	 pointer_y = aCallback(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+         }
+
          joy_x = aCallback(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
          joy_y = aCallback(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
 			
@@ -1148,6 +1154,25 @@ class OSystem_RETRO : public EventsBaseBackend, public PaletteManager {
          
          // Process input from physical mouse
          do_mouse = false;
+
+         // Absolute pointer position
+         if (pointer_x || pointer_y) {
+        	 _mouseX = ((x + 0x7fff) * _screen.w) / 0x10000;
+        	 _mouseY = ((y + 0x7fff) * _screen.h) / 0x10000;
+
+        	 _mouseX = (_mouseX < 0) ? 0 : _mouseX;
+        	 _mouseX = (_mouseX >= _screen.w) ? _screen.w : _mouseX;
+
+        	 _mouseY = (_mouseY < 0) ? 0 : _mouseY;
+        	 _mouseY = (_mouseY >= _screen.h) ? _screen.h : _mouseY;
+
+        	 // Reset accumulators
+        	 _mouseXAcc = 0.0;
+        	 _mouseYAcc = 0.0;
+
+        	 do_mouse = true;
+         }
+
          // > X Axis
          if (x != 0)
          {
