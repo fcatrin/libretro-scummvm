@@ -465,7 +465,10 @@ void ConfigManager::removeKey(const String &key, const String &domName) {
 
 
 const String &ConfigManager::get(const String &key) const {
-	if (_transientDomain.contains(key))
+	// workaround to launch directly into a game
+	bool isPath = !strcmp(key.c_str(), "path");
+
+	if (_transientDomain.contains(key) && !isPath)
 		return _transientDomain[key];
 	else if (_activeDomain && _activeDomain->contains(key))
 		return (*_activeDomain)[key];
