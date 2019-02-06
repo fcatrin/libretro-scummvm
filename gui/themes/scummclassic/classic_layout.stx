@@ -1007,6 +1007,7 @@
 					width = '150'
 					height = 'Globals.Button.Height'
 			/>
+			<!--
 			<space size = '10'/>
 			<widget name = 'RTL'
 					width = '150'
@@ -1016,6 +1017,7 @@
 					width = '150'
 					height = 'Globals.Button.Height'
 			/>
+			-->
 		</layout>
 	</dialog>
 
