@@ -28,6 +28,8 @@
 #define INCLUDED_FROM_BASE_VERSION_CPP
 #include "base/internal_version.h"
 
+#include "libretro_core_options.h"
+
 retro_log_printf_t log_cb = NULL;
 static retro_video_refresh_t video_cb = NULL;
 static retro_audio_sample_batch_t audio_batch_cb = NULL;
@@ -47,7 +49,7 @@ void retro_set_input_state(retro_input_state_t cb) { input_cb = cb; }
 static int analog_deadzone = (int)(0.15f * ANALOG_RANGE);
 
 static float gampad_cursor_speed = 1.0f;
-static bool analog_response_is_cubic = false;
+static bool analog_response_is_quadratic = false;
 
 static float mouse_speed = 1.0f;
 
@@ -55,20 +57,11 @@ static bool speed_hack_is_enabled = false;
 
 void retro_set_environment(retro_environment_t cb)
 {
-	struct retro_variable variables[] = {
-		{ "scummvm_gamepad_cursor_speed", "Gamepad Cursor Speed; 1.0|1.5|2.0|2.5|3.0|0.25|0.5|0.75" },
-		{ "scummvm_analog_response", "Analog Cursor Response; linear|cubic" },
-		{ "scummvm_analog_deadzone", "Analog Deadzone (percent); 15|20|25|30|0|5|10" },
-      { "scummvm_mouse_speed", "Mouse Speed; 1.0|1.25|1.5|1.75|2.0|2.5|3.0|0.05|0.1|0.15|0.2|0.25|0.3|0.35|0.4|0.45|0.5|0.6|0.7|0.8|0.9" },
-		{ "scummvm_speed_hack", "Speed Hack (Restart); disabled|enabled" },
-		{ NULL, NULL },
-	};
-
    environ_cb = cb;
    bool tmp = true;
 
    environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &tmp);
-   environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, variables);
+   libretro_set_core_options(environ_cb);
 }
 
 bool FRONTENDwantsExit;
@@ -231,11 +224,11 @@ static void update_variables(void)
 
 	var.key = "scummvm_analog_response";
 	var.value = NULL;
-	analog_response_is_cubic = false;
+	analog_response_is_quadratic = false;
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 	{
-		if (strcmp(var.value, "cubic") == 0)
-			analog_response_is_cubic = true;
+		if (strcmp(var.value, "quadratic") == 0)
+			analog_response_is_quadratic = true;
 	}
 
 	var.key = "scummvm_analog_deadzone";
@@ -301,39 +294,28 @@ bool retro_load_game(const struct retro_game_info *game)
       char* path = strdup(game->path);
       char* gamedir = dirname(path);
 
-      /* See if we are acting on a .scummvm file. */
-      if (strstr(path, ".scummvm") != NULL)
+      // Open the file.
+      FILE * gamefile = fopen(game->path, "r");
+      if (gamefile == NULL)
       {
-         // Retrieve the file data.
-         FILE * gamefile;
-         if (gamefile = fopen(game->path, "r"))
-         {
-            char filedata[400];
-            fgets(filedata , 400, gamefile);
-            fclose(gamefile);
+         log_cb(RETRO_LOG_ERROR, "[scummvm] Failed to load given game file.\n");
+         return false;
+      }
 
-            // Create a command line parameters using -p and the game name.
-            char buffer[400];
-            sprintf(buffer, "-p \"%s\" %s", gamedir, filedata);
-            parse_command_params(buffer);
-         }
-      }
-      else
+      // Load the file data.
+      char filedata[400];
+      if (fgets(filedata, 400, gamefile) == NULL)
       {
-         // Retrieve the file data.
-         FILE * gamefile;
-         if (gamefile = fopen(game->path, "r"))
-         {
-            /* Acting on a ScummVM rom file. */
-            char filedata[400];
-            if (fgets(filedata, 400, gamefile) != NULL) {
-               fclose(gamefile);
-               char buffer[400];
-               sprintf(buffer, "-p \"%s\" %s", gamedir, filedata);
-               parse_command_params(buffer);
-            }
-         }
+         fclose(gamefile);
+         log_cb(RETRO_LOG_ERROR, "[scummvm] Failed to load contents of game file.\n");
+         return false;
       }
+
+      // Create a command line parameters using -p and the game name.
+      char buffer[400];
+      sprintf(buffer, "-p \"%s\" %s", gamedir, filedata);
+      fclose(gamefile);
+      parse_command_params(buffer);
    }
 
 	struct retro_input_descriptor desc[] = {
@@ -427,7 +409,7 @@ void retro_run (void)
    if(g_system)
    {
       poll_cb();
-      retroProcessMouse(input_cb, retro_device, gampad_cursor_speed, analog_response_is_cubic, analog_deadzone, mouse_speed);
+      retroProcessMouse(input_cb, retro_device, gampad_cursor_speed, analog_response_is_quadratic, analog_deadzone, mouse_speed);
    }
 
    /* Run emu */
