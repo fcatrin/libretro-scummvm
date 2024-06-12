@@ -185,6 +185,8 @@ ipch/
 *.tss
 *.VC.db
 .vs/
+.idea/
+libretro-scummvm.iml
 
 #Ignore default Visual Studio build folders
 [Dd]ebug/
