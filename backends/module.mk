@@ -23,6 +23,7 @@ ifdef USE_CLOUD
 
 ifdef USE_LIBCURL
 MODULE_OBJS += \
+	cloud/basestorage.o \
 	cloud/cloudicon.o \
 	cloud/cloudmanager.o \
 	cloud/iso8601.o \
@@ -156,38 +157,47 @@ MODULE_OBJS += \
 endif
 endif
 
-# Connection::isLimited
-ifeq ($(BACKEND),android)
-MODULE_OBJS += \
-	networking/connection/islimited-android.o
-else
-MODULE_OBJS += \
-	networking/connection/islimited-default.o
-endif
-
 ifdef POSIX
 MODULE_OBJS += \
 	fs/posix/posix-fs.o \
 	fs/posix/posix-fs-factory.o \
+	fs/posix-drives/posix-drives-fs.o \
+	fs/posix-drives/posix-drives-fs-factory.o \
 	fs/chroot/chroot-fs-factory.o \
 	fs/chroot/chroot-fs.o \
 	plugins/posix/posix-provider.o \
 	saves/posix/posix-saves.o \
 	taskbar/unity/unity-taskbar.o
+
+ifdef USE_SPEECH_DISPATCHER
+ifdef USE_TTS
+MODULE_OBJS += \
+	text-to-speech/linux/linux-text-to-speech.o
+endif
+endif
+
 endif
 
 ifdef MACOSX
 MODULE_OBJS += \
 	audiocd/macosx/macosx-audiocd.o \
+	dialogs/macosx/macosx-dialogs.o \
 	midi/coreaudio.o \
 	midi/coremidi.o \
 	updates/macosx/macosx-updates.o \
 	taskbar/macosx/macosx-taskbar.o
+
+ifdef USE_TTS
+MODULE_OBJS += \
+	text-to-speech/macosx/macosx-text-to-speech.o
+endif
+
 endif
 
 ifdef WIN32
 MODULE_OBJS += \
 	audiocd/win32/win32-audiocd.o \
+	dialogs/win32/win32-dialogs.o \
 	fs/windows/windows-fs.o \
 	fs/windows/windows-fs-factory.o \
 	midi/windows.o \
@@ -195,12 +205,22 @@ MODULE_OBJS += \
 	saves/windows/windows-saves.o \
 	updates/win32/win32-updates.o \
 	taskbar/win32/win32-taskbar.o
+
+ifdef USE_TTS
+MODULE_OBJS += \
+	text-to-speech/windows/windows-text-to-speech.o
+endif
+
+endif
+
+ifeq ($(BACKEND),android)
+MODULE_OBJS += \
+	mutex/pthread/pthread-mutex.o
 endif
 
 ifeq ($(BACKEND),androidsdl)
 MODULE_OBJS += \
-	events/androidsdl/androidsdl-events.o \
-	graphics/androidsdl/androidsdl-graphics.o
+	events/androidsdl/androidsdl-events.o
 endif
 
 ifdef AMIGAOS
@@ -212,8 +232,10 @@ endif
 
 ifdef RISCOS
 MODULE_OBJS += \
+	events/riscossdl/riscossdl-events.o \
 	fs/riscos/riscos-fs.o \
-	fs/riscos/riscos-fs-factory.o
+	fs/riscos/riscos-fs-factory.o \
+	platform/sdl/riscos/riscos-utils.o
 endif
 
 ifdef PLAYSTATION3
@@ -232,6 +254,11 @@ endif
 ifeq ($(BACKEND),tizen)
 MODULE_OBJS += \
 	timer/tizen/timer.o
+endif
+
+ifeq ($(BACKEND),3ds)
+MODULE_OBJS += \
+	plugins/3ds/3ds-provider.o
 endif
 
 ifeq ($(BACKEND),ds)
@@ -297,7 +324,6 @@ MODULE_OBJS += \
 	fs/psp/psp-fs-factory.o \
 	fs/psp/psp-stream.o \
 	plugins/psp/psp-provider.o \
-	saves/psp/psp-saves.o \
 	timer/psp/timer.o
 endif
 
@@ -336,6 +362,11 @@ MODULE_OBJS += \
 	fs/wii/wii-fs.o \
 	fs/wii/wii-fs-factory.o \
 	plugins/wii/wii-provider.o
+endif
+
+ifeq ($(BACKEND),switch)
+MODULE_OBJS += \
+	events/switchsdl/switchsdl-events.o
 endif
 
 ifdef ENABLE_EVENTRECORDER

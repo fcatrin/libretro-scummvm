@@ -70,7 +70,7 @@ CREATE_DOSOUND_FORWARD(DoSoundSetVolume)
 CREATE_DOSOUND_FORWARD(DoSoundSetPriority)
 CREATE_DOSOUND_FORWARD(DoSoundSetLoop)
 
-#ifdef ENABLE_SCI32_MAC
+#ifdef ENABLE_SCI32
 reg_t kDoSoundPhantasmagoriaMac(EngineState *s, int argc, reg_t *argv) {
 	// Phantasmagoria Mac (and seemingly no other game (!)) uses this
 	// cutdown version of kDoSound.
@@ -257,6 +257,8 @@ reg_t kDoAudio(EngineState *s, int argc, reg_t *argv) {
 			debugC(kDebugLevelSound, "kDoAudio: CD audio subop");
 			return kDoCdAudio(s, argc - 1, argv + 1);
 		}
+		// fall through
+		// FIXME: fall through intended?
 
 		// 3 new subops in Pharkas CD (including CD demo). kDoAudio in Pharkas sits at seg026:038C
 	case 11:

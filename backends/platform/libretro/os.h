@@ -26,6 +26,10 @@
 #define FORBIDDEN_SYMBOL_ALLOW_ALL
 #include "libretro.h"
 
+#include "base/main.h"
+#include "common/system.h"
+#include "graphics/surface.libretro.h"
+
 #ifndef F_OK
 #define F_OK 0
 #endif
@@ -38,6 +42,9 @@
 #define R_OK 4
 #endif
 
+extern char cmd_params[20][200];
+extern char cmd_params_num;
+
 #if (defined(GEKKO) && !defined(WIIU)) || defined(__CELLOS_LV2__)
 extern int access(const char *path, int amode);
 #endif
@@ -45,7 +52,7 @@ extern int access(const char *path, int amode);
 OSystem* retroBuildOS(bool aEnableSpeedHack);
 const Graphics::Surface& getScreen();
 
-void retroProcessMouse(retro_input_state_t aCallback, int device, float gampad_cursor_speed, bool analog_response_is_cubic, int analog_deadzone, float mouse_speed);
+void retroProcessMouse(retro_input_state_t aCallback, int device, float gampad_cursor_speed, bool analog_response_is_quadratic, int analog_deadzone, float mouse_speed);
 void retroPostQuit();
 
 void retroSetSystemDir(const char* aPath);

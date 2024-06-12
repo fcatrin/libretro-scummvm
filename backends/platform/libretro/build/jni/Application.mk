@@ -1,3 +1,2 @@
-APP_ABI := x86 armeabi-v7a
-APP_STL := gnustl_static
-APP_OPTIM := release
+APP_ABI := all
+APP_STL := c++_static

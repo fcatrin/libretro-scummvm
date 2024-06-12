@@ -23,6 +23,9 @@
 
 // Allow use of stuff in <time.h>
 #define FORBIDDEN_SYMBOL_EXCEPTION_time_h
+// Allow use of stuff in <nds.h>
+#define FORBIDDEN_SYMBOL_EXCEPTION_printf
+#define FORBIDDEN_SYMBOL_EXCEPTION_unistd_h
 
 #include "common/scummsys.h"
 #include "common/system.h"
@@ -127,7 +130,7 @@ void OSystem_DS::initBackend() {
 		DS::startSound(11025, 4096);
 	}
 
-	_mixer = new Audio::MixerImpl(this, DS::getSoundFrequency());
+	_mixer = new Audio::MixerImpl(DS::getSoundFrequency());
 	_mixer->setReady(true);
 
 	/* TODO/FIXME: The NDS should use a custom AudioCD manager instance!
@@ -492,8 +495,8 @@ void OSystem_DS::updateScreen() {
 	}
 }
 
-void OSystem_DS::setShakePos(int shakeOffset) {
-	DS::setShakePos(shakeOffset);
+void OSystem_DS::setShakePos(int shakeXOffset, int shakeYOffset) {
+	DS::setShakePos(shakeXOffset, shakeYOffset);
 }
 
 void OSystem_DS::showOverlay() {

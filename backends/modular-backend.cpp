@@ -20,8 +20,6 @@
  *
  */
 
-#define FORBIDDEN_SYMBOL_EXCEPTION_exit
-
 #include "backends/modular-backend.h"
 
 #include "backends/graphics/graphics.h"
@@ -91,6 +89,22 @@ bool ModularBackend::setShader(int id) {
 
 int ModularBackend::getShader() const {
 	return _graphicsManager->getShader();
+}
+
+const OSystem::GraphicsMode *ModularBackend::getSupportedStretchModes() const {
+	return _graphicsManager->getSupportedStretchModes();
+}
+
+int ModularBackend::getDefaultStretchMode() const {
+	return _graphicsManager->getDefaultStretchMode();
+}
+
+bool ModularBackend::setStretchMode(int mode) {
+	return _graphicsManager->setStretchMode(mode);
+}
+
+int ModularBackend::getStretchMode() const {
+	return _graphicsManager->getStretchMode();
 }
 
 void ModularBackend::resetGraphicsScale() {
@@ -169,8 +183,8 @@ void ModularBackend::updateScreen() {
 #endif
 }
 
-void ModularBackend::setShakePos(int shakeOffset) {
-	_graphicsManager->setShakePos(shakeOffset);
+void ModularBackend::setShakePos(int shakeXOffset, int shakeYOffset) {
+	_graphicsManager->setShakePos(shakeXOffset, shakeYOffset);
 }
 void ModularBackend::setFocusRectangle(const Common::Rect& rect) {
 	_graphicsManager->setFocusRectangle(rect);
@@ -260,8 +274,4 @@ void ModularBackend::displayMessageOnOSD(const char *msg) {
 
 void ModularBackend::displayActivityIconOnOSD(const Graphics::Surface *icon) {
 	_graphicsManager->displayActivityIconOnOSD(icon);
-}
-
-void ModularBackend::quit() {
-	exit(0);
 }

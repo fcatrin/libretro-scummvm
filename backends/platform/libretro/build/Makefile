@@ -12,7 +12,10 @@ USE_THEORADEC=1
 USE_FREETYPE2=1
 HAVE_MT32EMU=1
 USE_FLUIDSYNTH=1
+USE_LUA    = 1
+USE_LIBCO  = 1
 
+HIDE := @
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
 BACKSLASH :=
@@ -30,7 +33,10 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
    platform = win
 else ifneq ($(findstring Darwin,$(shell uname -a)),)
    platform = osx
-	arch = intel
+   arch = intel
+ifeq ($(shell uname -p),arm64)
+	arch = arm
+endif
 ifeq ($(shell uname -p),powerpc)
 	arch = ppc
 endif
@@ -50,10 +56,14 @@ ifneq ($(GIT_VERSION)," unknown")
 endif
 
 TARGET_64BIT = 0
+ifeq ($(BUILD_64BIT),)
 ifeq ($(shell uname -m), x86_64)
+   BUILD_64BIT = 1
+else ifeq ($(shell uname -m), arm64)
    BUILD_64BIT = 1
 else
    BUILD_64BIT = 0
+endif
 endif
 
 LD        = $(CXX)
@@ -65,35 +75,83 @@ ifeq ($(platform), unix)
    DEFINES += -fPIC
    LDFLAGS += -shared -Wl,--version-script=../link.T -fPIC
    TARGET_64BIT := $(BUILD_64BIT)
+
+# Raspberry Pi 3 (64 bit)
+else ifeq ($(platform), rpi3_64)
+   TARGET = $(TARGET_NAME)_libretro.so
+   DEFINES += -fPIC
+   CFLAGS += -fPIC
+   LDFLAGS += -shared -Wl,--version-script=../link.T -fPIC
+   CFLAGS += -mcpu=cortex-a53 -mtune=cortex-a53
+   CFLAGS += -fomit-frame-pointer -ffast-math
+   CXXFLAGS = $(CFLAGS) -frtti
+   BUILD_64BIT = 1
+
+# Raspberry Pi 4 (64 bit)
+else ifeq ($(platform), rpi4_64)
+   TARGET = $(TARGET_NAME)_libretro.so
+   DEFINES += -fPIC
+   CFLAGS += -fPIC
+   LDFLAGS += -shared -Wl,--version-script=../link.T -fPIC
+   CFLAGS += -mcpu=cortex-a72 -mtune=cortex-a72
+   CFLAGS += -fomit-frame-pointer -ffast-math
+   CXXFLAGS = $(CFLAGS) -frtti
+   BUILD_64BIT = 1
+
 # OS X
 else ifeq ($(platform), osx)
    TARGET  := $(TARGET_NAME)_libretro.dylib
    DEFINES += -fPIC
    LDFLAGS += -dynamiclib -fPIC
-ifneq ($(shell uname -p),powerpc)
-   arch = intel
+   DEFINES += -DHAVE_POSIX_MEMALIGN=1
    TARGET_64BIT := $(BUILD_64BIT)
-else
-   arch = ppc
-endif
+
+   ifeq ($(CROSS_COMPILE),1)
+	TARGET_RULE   = -target $(LIBRETRO_APPLE_PLATFORM) -isysroot $(LIBRETRO_APPLE_ISYSROOT)
+	CFLAGS   += $(TARGET_RULE)
+	CPPFLAGS += $(TARGET_RULE)
+	CXXFLAGS += $(TARGET_RULE)
+	LDFLAGS  += $(TARGET_RULE)
+	# Hardcode TARGET_64BIT for now
+	TARGET_64BIT = 1
+   endif
 
 # iOS
 else ifneq (,$(findstring ios,$(platform)))
    TARGET  := $(TARGET_NAME)_libretro_ios.dylib
    DEFINES += -fPIC -DHAVE_POSIX_MEMALIGN=1 -DIOS
    LDFLAGS += -dynamiclib -fPIC
+   MINVERSION :=
 
 ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
 endif
-
-   CXX      = clang++ -arch armv7 -isysroot $(IOSSDK) -marm
-
-ifeq ($(platform),ios9)
-	CXX     += -miphoneos-version-min=8.0
+ifeq ($(platform),ios-arm64)
+  CC        = cc -arch arm64 -isysroot $(IOSSDK)
+  CXX       = c++ -arch arm64 -isysroot $(IOSSDK)
 else
-	CXX     += -miphoneos-version-min=5.0
+   CC       = cc -arch armv7 -isysroot $(IOSSDK)
+   CXX      = c++ -arch armv7 -isysroot $(IOSSDK)
 endif
+
+ifeq ($(platform),$(filter $(platform),ios9 ios-arm64))
+   MINVERSION += -miphoneos-version-min=8.0
+else
+   MINVERSION += -miphoneos-version-min=5.0
+endif
+  CFLAGS   += $(MINVERSION)
+  CXXFLAGS += $(MINVERSION)
+
+else ifeq ($(platform), tvos-arm64)
+   EXT?=dylib
+   TARGET := $(TARGET_NAME)_libretro_tvos.$(EXT)
+   DEFINES += -fPIC -DHAVE_POSIX_MEMALIGN=1 -DIOS
+   LDFLAGS += -dynamiclib -fPIC
+ifeq ($(IOSSDK),)
+   IOSSDK := $(shell xcodebuild -version -sdk appletvos Path)
+endif
+   CC  = cc -arch arm64 -isysroot $(IOSSDK)
+   CXX = c++ -arch arm64 -isysroot $(IOSSDK)
 
 # QNX
 else ifeq ($(platform), qnx)
@@ -105,6 +163,24 @@ else ifeq ($(platform), qnx)
    LD = QCC -Vgcc_ntoarmv7le
    AR = qcc -Vgcc_ntoarmv7le -A
    RANLIB="${QNX_HOST}/usr/bin/ntoarmv7-ranlib"
+
+# Genode
+else ifeq ($(platform), genode)
+   TARGET  := libretro.so
+   TARGET_64BIT := $(BUILD_64BIT)
+   DEFINES += -fPIC -DSYSTEM_NOT_SUPPORTING_D_TYPE -DFRONTEND_SUPPORTS_RGB565
+   C_PKGS   = libc
+   CXX_PKGS = stdcxx genode-base
+   CFLAGS   += -D__GENODE__ $(shell pkg-config --cflags $(C_PKGS))
+   CXXFLAGS += -D__GENODE__ $(shell pkg-config --cflags $(CXX_PKGS))
+
+   LIBS += $(shell pkg-config --libs $(C_PKGS) $(CXX_PKGS) genode-lib)
+
+   CC  = $(shell pkg-config genode-base --variable=cc)
+   CXX = $(shell pkg-config genode-base --variable=cxx)
+   LD  = $(shell pkg-config genode-base --variable=ld)
+   AR  = $(shell pkg-config genode-base --variable=ar) rcs
+   RANLIB = genode-x86-ranlib
 
 # PS3
 else ifeq ($(platform), ps3)
@@ -131,8 +207,7 @@ else ifeq ($(platform), libnx)
     EXT=a
     TARGET := $(TARGET_NAME)_libretro_$(platform).$(EXT)
     DEFINES := -DSWITCH=1 -U__linux__ -U__linux
-    DEFINES	:=	 -g -O3 \
-                 -fPIE -I$(LIBNX)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec -Wl,--allow-multiple-definition -specs=$(LIBNX)/switch.specs
+    DEFINES	+= -g -O3 -fPIE -I$(LIBNX)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec
     DEFINES += $(INCDIRS)
     DEFINES += -D__SWITCH__ -DHAVE_LIBNX -march=armv8-a -mtune=cortex-a57 -mtp=soft
     DEFINES += -I../libretro-common/include
@@ -151,6 +226,28 @@ else ifeq ($(platform), wiiu)
    DEFINES += -DHAVE_STRTOUL -DWIIU -I../libretro-common/include
    LITE := 1
    CP := cp
+
+else ifeq ($(platform), ctr)
+   TARGET := $(TARGET_NAME)_libretro_$(platform).a
+   CC = $(DEVKITARM)/bin/arm-none-eabi-gcc$(EXE_EXT)
+   CXX = $(DEVKITARM)/bin/arm-none-eabi-g++$(EXE_EXT)
+   AR = $(DEVKITARM)/bin/arm-none-eabi-ar$(EXE_EXT) rcs
+   RANLIB = $(DEVKITARM)/bin/arm-none-eabi-ranlib$(EXE_EXT)
+   ifeq ($(strip $(CTRULIB)),)
+      $(error "Please set CTRULIB in your environment. export CTRULIB=<path to>libctru")
+   endif
+   DEFINES += -DARM11 -D_3DS -I$(CTRULIB)/include
+   DEFINES += -march=armv6k -mtune=mpcore -mfloat-abi=hard
+   DEFINES += -Wall -mword-relocations
+   DEFINES += -fomit-frame-pointer -ffast-math
+   CXXFLAGS += -std=gnu++11 -fpermissive
+   USE_VORBIS = 0
+   USE_THEORADEC = 0
+   USE_TREMOR = 1
+   HAVE_MT32EMU = 0
+   NO_HIGH_DEF := 1
+   STATIC_LINKING = 1
+
 # Vita
 else ifeq ($(platform), vita)
 	TARGET := $(TARGET_NAME)_libretro_$(platform).a
@@ -159,6 +256,42 @@ else ifeq ($(platform), vita)
 	AR = arm-vita-eabi-ar$(EXE_EXT) rcs
 	DEFINES += -DVITA
 	STATIC_LINKING = 1
+
+# GCW0
+else ifeq ($(platform), gcw0)
+   TARGET := $(TARGET_NAME)_libretro.so
+   CC = /opt/gcw0-toolchain/usr/bin/mipsel-linux-gcc
+   CXX = /opt/gcw0-toolchain/usr/bin/mipsel-linux-g++
+   LD = /opt/gcw0-toolchain/usr/bin/mipsel-linux-g++
+   AR = /opt/gcw0-toolchain/usr/bin/mipsel-linux-ar cru
+   RANLIB = /opt/gcw0-toolchain/usr/bin/mipsel-linux-ranlib
+   DEFINES += -DDINGUX -fomit-frame-pointer -ffast-math -march=mips32 -mtune=mips32r2 -mhard-float -fPIC
+   DEFINES += -ffunction-sections -fdata-sections
+   LDFLAGS += -shared -Wl,--gc-sections -Wl,--version-script=../link.T -fPIC
+   USE_VORBIS = 0
+   USE_THEORADEC = 0
+   USE_TREMOR = 1
+   USE_LIBCO  = 0
+   HAVE_MT32EMU = 0
+   NO_HIGH_DEF := 1
+
+# MIYOO
+else ifeq ($(platform), miyoo)
+   TARGET := $(TARGET_NAME)_libretro.so
+   CC = /opt/miyoo/usr/bin/arm-linux-gcc
+   CXX = /opt/miyoo/usr/bin/arm-linux-g++
+   LD = /opt/miyoo/usr/bin/arm-linux-g++
+   AR = /opt/miyoo/usr/bin/arm-linux-ar cru
+   RANLIB = /opt/miyoo/usr/bin/arm-linux-ranlib
+   DEFINES += -DDINGUX -fomit-frame-pointer -ffast-math -march=armv5te -mtune=arm926ej-s -fPIC
+   DEFINES += -ffunction-sections -fdata-sections
+   LDFLAGS += -shared -Wl,--gc-sections -Wl,--version-script=../link.T -fPIC
+   USE_VORBIS = 0
+   USE_THEORADEC = 0
+   USE_TREMOR = 1
+   USE_LIBCO  = 0
+   HAVE_MT32EMU = 0
+   NO_HIGH_DEF := 1
 
 else ifeq ($(platform), android-armv7)
    TARGET  := $(TARGET_NAME)_libretro_android.so
@@ -295,17 +428,20 @@ else ifneq (,$(findstring windows_msvc2017,$(platform)))
 	LDFLAGS += -DLL
 
 else
-	CC = gcc
+	CC ?= gcc
 	TARGET_64BIT := $(BUILD_64BIT)
-   TARGET  := $(TARGET_NAME)_libretro.dll
-   DEFINES += -DHAVE_FSEEKO -DHAVE_INTTYPES_H -fno-permissive
-   LDFLAGS += -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=../link.T
+	TARGET  := $(TARGET_NAME)_libretro.dll
+	DEFINES += -DHAVE_FSEEKO -DHAVE_INTTYPES_H -fPIC
+	CXXFLAGS += -fno-permissive
+	LDFLAGS += -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=../link.T -fPIC
 endif
 
 ifeq ($(DEBUG), 1)
    DEFINES += -O0 -g
 else ifeq ($(platform), wiiu)
    DEFINES += -Os
+else ifeq ($(platform),genode)
+   DEFINES += -O2
 else ifneq (,$(findstring msvc,$(platform)))
    DEFINES += -O2
 else
@@ -316,6 +452,12 @@ ifeq ($(TARGET_64BIT), 1)
    DEFINES += -DSIZEOF_SIZE_T=8 -DSCUMM_64BITS
 else
    DEFINES += -DSIZEOF_SIZE_T=4
+endif
+
+ifeq ($(USE_LIBCO), 1)
+   DEFINES += -DUSE_LIBCO
+else
+   LDFLAGS += -lpthread
 endif
 
 ###SCUMM VM
@@ -346,6 +488,9 @@ DEFINES       += -D__LIBRETRO__ -DNONSTANDARD_PORT -DUSE_RGB_COLOR -DUSE_OSD -DD
 DEPDIR        = .deps
 HAVE_GCC3     = true
 USE_RGB_COLOR = true
+
+DEFINES += -Wno-multichar -Wno-unknown-pragmas -Wno-write-strings
+CXXFLAGS += -Wno-reorder
 
 # Compile platform specific parts (e.g. filesystem)
 ifeq ($(platform), win)
@@ -397,7 +542,7 @@ ifeq ($(STATIC_LINKING),1)
 	LD ?= lib.exe
 	STATIC_LINKING=0
 else
-	LD = link.exe
+	LD ?= link.exe
 endif
 endif
 
@@ -411,45 +556,66 @@ $(TARGET): libnx-ln $(OBJS) libdeps.a
 	$(MKDIR) libtemp
 	cp $+ libtemp/
 	$(AR) -M < libnx.mri
+else ifeq ($(platform), ctr)
+$(TARGET): $(OBJS) libdeps.a
+	$(MKDIR) libtemp
+	cp $+ libtemp/
+	$(AR) -M < ctr.mri
 else ifeq ($(STATIC_LINKING), 1)
 $(TARGET): $(OBJS) libdeps.a 
-	$(AR) $@ $(wildcard *.o) $(wildcard */*.o) $(wildcard */*/*.o) $(wildcard */*/*/*.o) $(wildcard */*/*/*/*.o)  $(wildcard */*/*/*/*/*.o)
+	@echo Linking $@...
+	$(HIDE)$(AR) $@ $(wildcard *.o) $(wildcard */*.o) $(wildcard */*/*.o) $(wildcard */*/*/*.o) $(wildcard */*/*/*/*.o)  $(wildcard */*/*/*/*/*.o)
 else
 $(TARGET): $(OBJS) libdeps.a 
-	$(LD) $(LDFLAGS) $+ $(LIBS) $(LINKOUT)$@
+	@echo Linking $@...
+	$(HIDE)$(LD) $(LDFLAGS) $+ $(LIBS) $(LINKOUT)$@
 endif
 
 libdeps.a: $(OBJS_DEPS)
 ifeq ($(platform), libnx)
-		$(AR) -rc $@ $^
+		@echo Linking $@...
+		$(HIDE)$(AR) -rc $@ $^
 else
-		$(AR) $@ $^
+		@echo Linking $@...
+		$(HIDE)$(AR) $@ $^
 endif
+
+%.o: %.c
+	@echo Compiling $(<F)...
+	@$(MKDIR) $(*D)
+	$(HIDE)$(CC) -c $(CPPFLAGS) $(CFLAGS) -o $@ $<
+
+%.o: %.cpp
+	@echo Compiling $(<F)...
+	@$(MKDIR) $(*D)
+	$(HIDE)$(CXX) -c $(CPPFLAGS) $(CXXFLAGS) -o $@ $<
 
 # Dumb compile rule, for C++ compilers that don't allow dependency tracking or
 # where it is broken (such as GCC 2.95).
 .cpp.o:
-	$(MKDIR) $(*D)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(<) $(OBJOUT)$*.o
+	@$(MKDIR) $(*D)
+	@echo Compiling $<...
+	$(HIDE)$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(<) $(OBJOUT)$*.o
 
 clean:
-	$(RM_REC) $(DEPDIRS)
-	$(RM) $(OBJS) $(OBJS_DEPS) libdeps.a $(TARGET)
+	@echo Cleaning project...
+	$(HIDE)$(RM_REC) $(DEPDIRS)
+	$(HIDE)$(RM) $(OBJS) $(OBJS_DEPS) libdeps.a $(TARGET)
 ifeq ($(platform), wiiu)
-	$(RM_REC) libtemp
+	$(HIDE)$(RM_REC) libtemp
 endif	
 ifeq ($(platform), libnx)
-	$(RM_REC) libtemp
-	$(RM) audio
-	$(RM) backends
-	$(RM) base
-	$(RM) common
-	$(RM) engines
-	$(RM) graphics
-	$(RM) gui
-	$(RM) image
-	$(RM) video
-	$(RM) libnx-ln
+	$(HIDE)$(RM_REC) libtemp
+	$(HIDE)$(RM) audio
+	$(HIDE)$(RM) backends
+	$(HIDE)$(RM) base
+	$(HIDE)$(RM) common
+	$(HIDE)$(RM) engines
+	$(HIDE)$(RM) graphics
+	$(HIDE)$(RM) gui
+	$(HIDE)$(RM) image
+	$(HIDE)$(RM) video
+	$(HIDE)$(RM) libnx-ln
 endif	
 
 # Include the dependency tracking files.
